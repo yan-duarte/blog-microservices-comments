@@ -1,2 +1,1 @@
-# blog-microsservices-comments
-Blog Microsservices - Comments Service
+# Blog Microservices - Comments Service
