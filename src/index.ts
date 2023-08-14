@@ -2,9 +2,11 @@ import express, { Response } from 'express'
 import { json } from 'body-parser'
 import { randomBytes } from 'crypto'
 import { Comments, PostCommentsRequest } from './types'
+import cors from 'cors'
 
 const app = express()
 app.use(json())
+app.use(cors())
 
 const commentsByPostId: Comments = {}
 
