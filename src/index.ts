@@ -1,7 +1,12 @@
 import express, { Response } from "express";
 import { json } from "body-parser";
 import { randomBytes } from "crypto";
-import { Comments, PostCommentsRequest } from "./types";
+import {
+  Comments,
+  Event,
+  EventCommentModerated,
+  PostCommentsRequest,
+} from "./types";
 import cors from "cors";
 import axios from "axios";
 
@@ -10,6 +15,37 @@ app.use(json());
 app.use(cors());
 
 const commentsByPostId: Comments = {};
+
+const handleEvent = async ({ type, data }: Event) => {
+  switch (type) {
+    case "CommentModerated": {
+      const {
+        postId,
+        id: commentId,
+        ...eventComment
+      } = data as EventCommentModerated;
+
+      const localComment = commentsByPostId[postId].find(
+        (comment) => comment.id === commentId
+      );
+
+      if (localComment) {
+        localComment.status = eventComment.status;
+      }
+
+      await axios.post("http://localhost:4005/events", {
+        type: "CommentUpdated",
+        data: {
+          id: commentId,
+          postId,
+          ...localComment,
+        },
+      });
+
+      break;
+    }
+  }
+};
 
 app.get("/posts/:id/comments", (req, res: Response<Comments[0]>) => {
   const { id: postId } = req.params;
@@ -23,9 +59,9 @@ app.post(
     const { content } = req.body;
     const { id: postId } = req.params;
 
-    const comments = [
+    const comments: Comments[0] = [
       ...(commentsByPostId[postId] ?? []),
-      { id: commentId, content },
+      { id: commentId, content, status: "pending" },
     ];
 
     commentsByPostId[postId] = comments;
@@ -36,6 +72,7 @@ app.post(
         id: commentId,
         content,
         postId,
+        status: "pending",
       },
     });
 
@@ -47,9 +84,22 @@ app.post("/events", async (req, res) => {
   const { type, data } = req.body;
   console.log("Received Event", { type, data });
 
+  await handleEvent({ type, data });
+
   res.send({});
 });
 
-app.listen(4001, () => {
+app.listen(4001, async () => {
   console.log("Listening port 4001");
+
+  const { data: events } = await axios.get<Event[]>(
+    "http://localhost:4005/events"
+  );
+
+  await Promise.all(
+    events.map(async (event) => {
+      console.log("Processing event: ", event.type);
+      await handleEvent(event);
+    })
+  );
 });
